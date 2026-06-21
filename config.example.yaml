@@ -1,0 +1,71 @@
+# qm-agentd example configuration
+#
+# Copy to config.yaml and uncomment/adjust the identity block you need:
+#   cp config.example.yaml config.yaml
+#
+# Credential output (always per-billet):
+#   {output.dir}/manifest.json
+#   {output.dir}/billets/{name}/token
+#   {output.dir}/billets/{name}/key.pem   (csr.enabled)
+#   {output.dir}/billets/{name}/cert.pem  (csr.enabled)
+
+quartermaster:
+  url: https://quartermaster.example.com:8443
+  mtls:
+    # Trust Quartermaster's CA. For SPIRE mtls mode you can omit cert/key here
+    # (the SPIFFE SVID is used as the client certificate instead).
+    ca_file: /etc/qm-agent/ca.pem
+    cert_file: /etc/qm-agent/client.pem
+    key_file: /etc/qm-agent/client-key.pem
+
+identity:
+  # ---------------------------------------------------------------------------
+  # Option A — SPIRE (recommended on Kubernetes / VMs with SPIRE agent)
+  # ---------------------------------------------------------------------------
+  type: spire
+  spire:
+    # mtls: identity from X.509 SVID (no subject_token sent)
+    # jwt:  JWT SVID sent as subject_token (quartermaster.mtls still required)
+    mode: mtls
+    socket_path: unix:///tmp/spire-agent/public/api.sock
+    jwt_audience: quartermaster.example.com
+
+  # ---------------------------------------------------------------------------
+  # Option B — AWS (EC2/ECS/EKS with instance/task role credentials)
+  # ---------------------------------------------------------------------------
+  # type: aws
+  # aws:
+  #   region: us-east-1
+  #   subject_token_type: urn:quartermaster:token-type:aws-presigned-sts
+
+  # ---------------------------------------------------------------------------
+  # Option C — GCP (GCE / GKE with metadata server)
+  # ---------------------------------------------------------------------------
+  # type: gcp
+  # gcp:
+  #   audience: quartermaster.example.com
+  #   metadata_host: metadata.google.internal
+  #   subject_token_type: urn:quartermaster:token-type:gcp-identity
+
+exchange:
+  grant_type: urn:ietf:params:oauth:grant-type:token-exchange
+
+  # Empty list → POST /billets/me, then one token exchange per entitled billet.
+  # Non-empty → skip discovery; exchange only these billets (one token each).
+  billets: []
+
+  # Required for POST /token — typically your Quartermaster issuer URL.
+  audience: http://localhost:8443
+  subject_token_type: ""
+
+refresh:
+  # Re-exchange this long before the earliest billet token expires.
+  margin: 5m
+
+csr:
+  # When true, generate a per-billet EC key, submit a CSR during exchange,
+  # and write the issued chain to cert.pem beside the token.
+  enabled: false
+
+output:
+  dir: /var/run/qm-agent

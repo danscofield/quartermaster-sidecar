@@ -1,0 +1,1474 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Quartermaster",
+    "description": "Workload identity federation broker",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/.well-known/openid-configuration": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "summary": "GET /.well-known/openid-configuration — returns the OIDC discovery document.",
+        "operationId": "openid_configuration",
+        "responses": {
+          "200": {
+            "description": "OIDC discovery document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryDocument"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/billets": {
+      "get": {
+        "tags": [
+          "admin-billets"
+        ],
+        "summary": "GET /admin/billets — list all billets.",
+        "operationId": "list_billets",
+        "responses": {
+          "200": {
+            "description": "List of billets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BilletListItem"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin-billets"
+        ],
+        "summary": "POST /admin/billets — create a new billet metadata record.",
+        "operationId": "create_billet",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBilletRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Billet created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBilletMetadataResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/billets/{name}": {
+      "get": {
+        "tags": [
+          "admin-billets"
+        ],
+        "summary": "GET /admin/billets/:name — get a single billet by name (with attached policies).",
+        "operationId": "get_billet",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Billet with policies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BilletWithPolicies"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin-billets"
+        ],
+        "summary": "PUT /admin/billets/:name — update a billet's metadata.",
+        "operationId": "update_billet",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBilletRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Billet updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBilletMetadataResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin-billets"
+        ],
+        "summary": "DELETE /admin/billets/:name — delete a billet and all its attached policies (cascade).",
+        "operationId": "delete_billet",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Billet deleted"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/billets/{name}/policies": {
+      "get": {
+        "tags": [
+          "admin-policies"
+        ],
+        "summary": "GET /admin/billets/{name}/policies — list all policies for a billet.",
+        "operationId": "list_policies",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of policies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin-policies"
+        ],
+        "summary": "POST /admin/billets/{name}/policies — create a new Cedar policy under a billet.",
+        "operationId": "create_policy",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Policy created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Billet not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/billets/{name}/policies/{id}": {
+      "get": {
+        "tags": [
+          "admin-policies"
+        ],
+        "summary": "GET /admin/billets/{name}/policies/{id} — get a single policy.",
+        "operationId": "get_policy",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Policy details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin-policies"
+        ],
+        "summary": "PUT /admin/billets/{name}/policies/{id} — update a policy.",
+        "operationId": "update_policy",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Policy updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin-policies"
+        ],
+        "summary": "DELETE /admin/billets/{name}/policies/{id} — delete a policy.",
+        "operationId": "delete_policy",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Policy deleted"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/billets/me": {
+      "post": {
+        "tags": [
+          "discovery"
+        ],
+        "summary": "POST /billets/me — discover entitled billets without issuing a token.",
+        "description": "Performs steps 1–7 of the token exchange flow (validate identity → rate limit →\nresolve billets → implicit mapping → assemble), then returns the resolution\ndirectly as a JSON response.\n\nReturns 200 with empty arrays when the caller has no entitled billets (graceful).",
+        "operationId": "billet_discovery",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/BilletDiscoveryForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Discovery result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BilletDiscoveryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "MutualTLS": []
+          }
+        ]
+      }
+    },
+    "/billets/{name}": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "summary": "GET /billets/:name — retrieve billet metadata for data-plane callers.",
+        "description": "Requires a valid Quartermaster JWT. Evaluates `readBillet` authorization\nvia the local Cedar evaluator before returning metadata.",
+        "operationId": "get_billet",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Billet name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Billet metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BilletMetadataResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/ca/chain.pem": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "summary": "GET /ca/chain.pem — returns the CA certificate chain in PEM format.",
+        "operationId": "ca_chain",
+        "responses": {
+          "200": {
+            "description": "CA certificate chain in PEM format",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "GET /healthz — health check endpoint.",
+        "description": "Returns 200 if healthy or degraded, 503 if unhealthy.\nChecks DataStore connectivity, KeyManager health, and PolicySync initialization.",
+        "operationId": "healthz",
+        "responses": {
+          "200": {
+            "description": "Service healthy or degraded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jwks.json": {
+      "get": {
+        "tags": [
+          "discovery"
+        ],
+        "summary": "GET /jwks.json — returns the JSON Web Key Set for token verification.",
+        "operationId": "jwks",
+        "responses": {
+          "200": {
+            "description": "JSON Web Key Set"
+          }
+        }
+      }
+    },
+    "/token": {
+      "post": {
+        "tags": [
+          "token-exchange"
+        ],
+        "summary": "POST /token — RFC 8693 token exchange endpoint.",
+        "description": "Orchestrates: validate identity → rate limit → resolve billets → implicit mapping\n→ token assembly → issue JWT → (optional) issue cert → audit log → return response.\n\nIdentity resolution precedence:\n1. If `subject_token` is present → use token dispatch (existing path)\n2. If absent, try mTLS identity from client certificate extension\n3. If neither available → return 400",
+        "operationId": "token_exchange",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenExchangeForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token exchange successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "MutualTLS": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminBilletMetadataResponse": {
+        "type": "object",
+        "description": "Response body for a billet metadata record.",
+        "required": [
+          "name",
+          "description",
+          "associated_aws_roles",
+          "associated_gcp_sas",
+          "tags",
+          "updated_at"
+        ],
+        "properties": {
+          "associated_aws_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "associated_gcp_sas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "BilletDiscoveryForm": {
+        "type": "object",
+        "description": "Form body for the billet discovery request.",
+        "properties": {
+          "subject_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject_token_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "BilletDiscoveryResponse": {
+        "type": "object",
+        "description": "JSON response for billet discovery.",
+        "required": [
+          "billets",
+          "implicit_billets",
+          "cedar_billets"
+        ],
+        "properties": {
+          "billets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cedar_billets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "implicit_billets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BilletListItem": {
+        "type": "object",
+        "description": "Represents a billet in the list response.",
+        "required": [
+          "name",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "BilletMetadataResponse": {
+        "type": "object",
+        "description": "Response body for billet metadata.",
+        "required": [
+          "name",
+          "description",
+          "associated_aws_roles",
+          "associated_gcp_sas"
+        ],
+        "properties": {
+          "associated_aws_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "associated_gcp_sas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "BilletWithPolicies": {
+        "type": "object",
+        "description": "Response for GET /admin/billets/{name} — includes policies.",
+        "required": [
+          "name",
+          "description",
+          "associated_aws_roles",
+          "associated_gcp_sas",
+          "tags",
+          "updated_at",
+          "policies"
+        ],
+        "properties": {
+          "associated_aws_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "associated_gcp_sas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PolicySummary"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateBilletRequest": {
+        "type": "object",
+        "description": "Request body for creating a billet.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "associated_aws_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "associated_gcp_sas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CreatePolicyRequest": {
+        "type": "object",
+        "description": "Request body for creating a policy under a billet.",
+        "required": [
+          "statement"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          }
+        }
+      },
+      "DiscoveryDocument": {
+        "type": "object",
+        "description": "OpenID Connect discovery document for Quartermaster.\n\nServes at `GET /.well-known/openid-configuration` and provides\ncloud provider IAM systems with the information needed to verify\nQuartermaster-issued JWTs.",
+        "required": [
+          "issuer",
+          "jwks_uri",
+          "response_types_supported",
+          "subject_types_supported",
+          "id_token_signing_alg_values_supported",
+          "claims_supported"
+        ],
+        "properties": {
+          "claims_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Supported claims in issued tokens."
+          },
+          "id_token_signing_alg_values_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Supported signing algorithms for ID tokens."
+          },
+          "issuer": {
+            "type": "string",
+            "description": "The issuer URL matching Quartermaster's configured issuer."
+          },
+          "jwks_uri": {
+            "type": "string",
+            "description": "The URL of the JWKS endpoint (issuer + \"/jwks.json\")."
+          },
+          "response_types_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Supported response types."
+          },
+          "subject_types_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Supported subject types."
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "The JSON body structure for error responses, following OAuth 2.0 conventions.",
+        "required": [
+          "error",
+          "error_description"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_description": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthChecks": {
+        "type": "object",
+        "required": [
+          "datastore",
+          "signing_key",
+          "policy_sync"
+        ],
+        "properties": {
+          "datastore": {
+            "type": "string"
+          },
+          "policy_sync": {
+            "type": "string"
+          },
+          "signing_key": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "checks"
+        ],
+        "properties": {
+          "checks": {
+            "$ref": "#/components/schemas/HealthChecks"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicyResponse": {
+        "type": "object",
+        "description": "Response body for a policy record.",
+        "required": [
+          "id",
+          "statement",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicySummary": {
+        "type": "object",
+        "description": "Summary of a policy attached to a billet.",
+        "required": [
+          "id",
+          "statement",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenExchangeForm": {
+        "type": "object",
+        "description": "Form body for the token exchange request (application/x-www-form-urlencoded).",
+        "properties": {
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "billets": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional comma-separated list of billet names to scope the token to."
+          },
+          "csr": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grant_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject_token_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TokenExchangeResponse": {
+        "type": "object",
+        "description": "JSON response for a successful token exchange.",
+        "required": [
+          "access_token",
+          "issued_token_type",
+          "token_type",
+          "expires_in"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "certificate_chain": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "issued_token_type": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateBilletRequest": {
+        "type": "object",
+        "description": "Request body for updating a billet.",
+        "properties": {
+          "associated_aws_roles": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "associated_gcp_sas": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpdatePolicyRequest": {
+        "type": "object",
+        "description": "Request body for updating a policy under a billet.",
+        "required": [
+          "statement"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "MutualTLS": {
+        "type": "mutualTLS",
+        "description": "mTLS client certificate"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "token-exchange",
+      "description": "RFC 8693 token exchange"
+    },
+    {
+      "name": "discovery",
+      "description": "OIDC discovery, JWKS, CA chain, billet lookup"
+    },
+    {
+      "name": "admin-billets",
+      "description": "Billet CRUD (admin control plane)"
+    },
+    {
+      "name": "admin-policies",
+      "description": "Policy CRUD (admin control plane)"
+    },
+    {
+      "name": "system",
+      "description": "Health and operational endpoints"
+    }
+  ]
+}

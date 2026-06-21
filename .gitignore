@@ -1,0 +1,32 @@
+# Binaries
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test / coverage
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Local config and secrets
+config.yaml
+.env
+.env.*
+
+# Generated OpenAPI intermediate (regenerate with make generate)
+openapi.codegen.json
+
+# Local dev: mTLS material, issued tokens/certs, runtime output
+/data/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
