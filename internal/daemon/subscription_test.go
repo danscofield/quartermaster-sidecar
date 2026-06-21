@@ -7,24 +7,34 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/dscof/qm-agent/internal/config"
 )
 
 func TestSubscriptionAPI(t *testing.T) {
+	audience := "https://api.example.com"
+	subID := subscriptionID([]string{"analytics", "payments"}, audience)
+
 	d := &Daemon{
+		cfg: &config.Config{
+			Exchange: config.ExchangeConfig{Audience: "http://localhost:8443"},
+		},
 		available: []string{"payments", "analytics", "other"},
 		subscriptions: map[string]*subscription{
-			"analytics__payments": {
-				billets: []string{"analytics", "payments"},
-				status:  "ready",
+			subID: {
+				billets:  []string{"analytics", "payments"},
+				audience: audience,
+				status:   "ready",
 				cred: billetCredential{
 					token:   "combined-jwt",
 					expires: time.Now().Add(time.Hour),
 				},
 			},
-			"other__payments": {
-				billets: []string{"other", "payments"},
-				status:  "pending",
-				reason:  "waiting for billet(s): missing",
+			subscriptionID([]string{"other", "payments"}, audience): {
+				billets:  []string{"other", "payments"},
+				audience: audience,
+				status:   "pending",
+				reason:   "waiting for billet(s): missing",
 			},
 		},
 	}
@@ -42,7 +52,7 @@ func TestSubscriptionAPI(t *testing.T) {
 	}
 
 	var manifest struct {
-		Available     []string                       `json:"available"`
+		Available     []string                        `json:"available"`
 		Subscriptions map[string]ManifestSubscription `json:"subscriptions"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
@@ -51,11 +61,14 @@ func TestSubscriptionAPI(t *testing.T) {
 	if len(manifest.Available) != 3 {
 		t.Fatalf("available = %v", manifest.Available)
 	}
-	if manifest.Subscriptions["analytics__payments"].Status != "ready" {
-		t.Fatalf("subscription status = %q", manifest.Subscriptions["analytics__payments"].Status)
+	if manifest.Subscriptions[subID].Status != "ready" {
+		t.Fatalf("subscription status = %q", manifest.Subscriptions[subID].Status)
+	}
+	if manifest.Subscriptions[subID].Audience != audience {
+		t.Fatalf("audience = %q", manifest.Subscriptions[subID].Audience)
 	}
 
-	tokenResp, err := http.Get(ts.URL + "/subscriptions/analytics__payments/token")
+	tokenResp, err := http.Get(ts.URL + "/subscriptions/" + subID + "/token")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +77,10 @@ func TestSubscriptionAPI(t *testing.T) {
 		t.Fatalf("token status %d", tokenResp.StatusCode)
 	}
 
-	body, _ := json.Marshal(createSubscriptionRequest{Billets: []string{"payments", "analytics"}})
+	body, _ := json.Marshal(createSubscriptionRequest{
+		Billets:  []string{"payments", "analytics"},
+		Audience: audience,
+	})
 	createResp, err := http.Post(ts.URL+"/subscriptions", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +99,21 @@ func TestNormalizeBillets(t *testing.T) {
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Fatalf("normalize = %v", got)
 	}
-	if subscriptionID(got) != "a__b" {
-		t.Fatalf("id = %q", subscriptionID(got))
+	if subscriptionID(got, "https://api.example.com") != "a__b__aud__https_api.example.com" {
+		t.Fatalf("id = %q", subscriptionID(got, "https://api.example.com"))
+	}
+}
+
+func TestResolveAudience(t *testing.T) {
+	d := &Daemon{cfg: &config.Config{Exchange: config.ExchangeConfig{Audience: "http://default"}}}
+
+	got, err := d.resolveAudience("")
+	if err != nil || got != "http://default" {
+		t.Fatalf("default audience = %q, err = %v", got, err)
+	}
+
+	got, err = d.resolveAudience("https://custom")
+	if err != nil || got != "https://custom" {
+		t.Fatalf("custom audience = %q, err = %v", got, err)
 	}
 }

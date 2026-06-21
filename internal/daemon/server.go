@@ -69,6 +69,7 @@ func (d *Daemon) manifestSubscription(id string, sub *subscription) ManifestSubs
 	base := subscriptionBasePath(id)
 	entry := ManifestSubscription{
 		Billets:   append([]string(nil), sub.billets...),
+		Audience:  sub.audience,
 		Status:    sub.status,
 		TokenPath: base + "/token",
 	}
@@ -141,7 +142,8 @@ func (d *Daemon) handleBilletKey(w http.ResponseWriter, r *http.Request) {
 }
 
 type createSubscriptionRequest struct {
-	Billets []string `json:"billets"`
+	Billets  []string `json:"billets"`
+	Audience string   `json:"audience,omitempty"`
 }
 
 func (d *Daemon) handleCreateSubscription(w http.ResponseWriter, r *http.Request) {
@@ -157,11 +159,18 @@ func (d *Daemon) handleCreateSubscription(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	id := subscriptionID(billets)
+	audience, err := d.resolveAudience(req.Audience)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	id := subscriptionID(billets, audience)
 	sub := &subscription{
-		billets: billets,
-		status:  "pending",
-		reason:  "waiting for discovery",
+		billets:  billets,
+		audience: audience,
+		status:   "pending",
+		reason:   "waiting for discovery",
 	}
 
 	d.mu.Lock()

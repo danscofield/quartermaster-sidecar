@@ -59,8 +59,8 @@ curl -s http://127.0.0.1:8765/manifest.json | jq .
 # Combined credentials for payments + analytics (one QM /token call):
 curl -s -X POST http://127.0.0.1:8765/subscriptions \
   -H 'Content-Type: application/json' \
-  -d '{"billets":["payments","analytics"]}' | jq .
-curl -s http://127.0.0.1:8765/subscriptions/analytics__payments/token
+  -d '{"billets":["payments","analytics"],"audience":"https://api.example.com"}' | jq .
+curl -s http://127.0.0.1:8765/subscriptions/analytics__payments__aud__https_api.example.com/token
 ```
 
 Refresh is scheduled from the **earliest** token expiry across per-billet and subscription credentials.

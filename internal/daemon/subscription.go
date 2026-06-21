@@ -35,12 +35,16 @@ func normalizeBillets(names []string) ([]string, error) {
 	return out, nil
 }
 
-func subscriptionID(billets []string) string {
+func subscriptionID(billets []string, audience string) string {
 	parts := make([]string, len(billets))
 	for i, b := range billets {
 		parts[i] = sanitizeBilletName(b)
 	}
-	return strings.Join(parts, "__")
+	id := strings.Join(parts, "__")
+	if aud := sanitizeBilletName(audience); aud != "" {
+		id += "__aud__" + aud
+	}
+	return id
 }
 
 func billetsAvailable(billets []string, available map[string]struct{}) (bool, []string) {

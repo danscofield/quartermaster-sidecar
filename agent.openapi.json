@@ -201,7 +201,7 @@
       "post": {
         "tags": ["subscriptions"],
         "summary": "Create or refresh a subscription",
-        "description": "Subscribe to a sorted, deduplicated list of billets. When all billets appear in manifest.available, the daemon performs one combined Quartermaster token exchange. Subscription id is the sorted billet names joined with `__` (sanitized for URLs).",
+        "description": "Subscribe to a sorted, deduplicated list of billets for a target audience. When all billets appear in manifest.available, the daemon performs one combined Quartermaster token exchange. Subscription id is `{billets}__aud__{audience}` with URL-safe sanitization. Omit audience to use exchange.audience from the daemon config.",
         "operationId": "create_subscription",
         "requestBody": {
           "required": true,
@@ -249,7 +249,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "Subscription id (e.g. analytics__payments)",
+            "description": "Subscription id (e.g. analytics__payments__aud__https_api.example.com)",
             "schema": { "type": "string" }
           }
         ],
@@ -444,11 +444,16 @@
       },
       "ManifestSubscription": {
         "type": "object",
-        "required": ["billets", "status", "token_path"],
+        "required": ["billets", "audience", "status", "token_path"],
         "properties": {
           "billets": {
             "type": "array",
             "items": { "type": "string" }
+          },
+          "audience": {
+            "type": "string",
+            "description": "Token audience passed to Quartermaster /token",
+            "example": "https://api.example.com"
           },
           "status": {
             "type": "string",
@@ -470,6 +475,11 @@
             "minItems": 1,
             "items": { "type": "string" },
             "example": ["payments", "analytics"]
+          },
+          "audience": {
+            "type": "string",
+            "description": "JWT audience for the exchanged token. Defaults to exchange.audience in the daemon config when omitted.",
+            "example": "https://api.example.com"
           }
         }
       },
@@ -481,8 +491,8 @@
             "properties": {
               "id": {
                 "type": "string",
-                "description": "Sorted billet names joined with __",
-                "example": "analytics__payments"
+                "description": "Sorted billet names and audience, URL-sanitized",
+                "example": "analytics__payments__aud__https_api.example.com"
               }
             }
           },

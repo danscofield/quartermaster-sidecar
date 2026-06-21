@@ -59,6 +59,7 @@ type ExchangeConfig struct {
 	// When false, only discovery runs until workloads POST /subscriptions.
 	AutoPerBillet    *bool    `yaml:"auto_per_billet,omitempty"`
 	GrantType        string   `yaml:"grant_type"`
+	// Default JWT audience for token exchange when not specified per subscription.
 	Audience         string   `yaml:"audience"`
 	SubjectTokenType string   `yaml:"subject_token_type"`
 }

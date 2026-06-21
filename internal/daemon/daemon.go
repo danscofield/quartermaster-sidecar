@@ -232,7 +232,7 @@ func (d *Daemon) refreshAutoBillets(ctx context.Context, cred *identity.Credenti
 	for _, name := range billets {
 		active[name] = struct{}{}
 
-		resp, err := d.exchangeBillets(ctx, cred, []string{name}, name, name)
+		resp, err := d.exchangeBillets(ctx, cred, []string{name}, name, name, d.cfg.Exchange.Audience)
 		if err != nil {
 			refreshErr = errors.Join(refreshErr, fmt.Errorf("%s: %w", name, err))
 			continue
@@ -286,7 +286,7 @@ func (d *Daemon) refreshSubscriptions(ctx context.Context, cred *identity.Creden
 			continue
 		}
 
-		resp, err := d.exchangeBillets(ctx, cred, sub.billets, id, strings.Join(sub.billets, ","))
+		resp, err := d.exchangeBillets(ctx, cred, sub.billets, id, strings.Join(sub.billets, ","), sub.audience)
 		if err != nil {
 			refreshErr = errors.Join(refreshErr, fmt.Errorf("subscription %s: %w", id, err))
 			continue
@@ -304,6 +304,7 @@ func (d *Daemon) refreshSubscriptions(ctx context.Context, cred *identity.Creden
 		d.logger.Info("exchanged subscription credentials",
 			"subscription", id,
 			"billets", sub.billets,
+			"audience", sub.audience,
 			"expires_at", entry.ExpiresAt,
 			"has_certificate", bcred.certPEM != "",
 		)
@@ -366,14 +367,14 @@ func (d *Daemon) keyPEM(keyID string) ([]byte, bool) {
 	return k, true
 }
 
-func (d *Daemon) exchangeBillets(ctx context.Context, cred *identity.Credential, billetNames []string, keyID, csrCN string) (*qmclient.TokenExchangeResponse, error) {
+func (d *Daemon) exchangeBillets(ctx context.Context, cred *identity.Credential, billetNames []string, keyID, csrCN, audience string) (*qmclient.TokenExchangeResponse, error) {
 	joined := strings.Join(billetNames, ",")
 	form := qmclient.TokenExchangeForm{
 		GrantType: strPtr(d.cfg.Exchange.GrantType),
 		Billets:   &joined,
 	}
-	if d.cfg.Exchange.Audience != "" {
-		form.Audience = &d.cfg.Exchange.Audience
+	if audience != "" {
+		form.Audience = &audience
 	}
 
 	if cred != nil && cred.SubjectToken != "" {
@@ -439,6 +440,20 @@ func generateKeyPEM() ([]byte, error) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func (d *Daemon) resolveAudience(requested string) (string, error) {
+	audience := strings.TrimSpace(requested)
+	if audience == "" {
+		if d.cfg == nil {
+			return "", fmt.Errorf("audience is required")
+		}
+		audience = strings.TrimSpace(d.cfg.Exchange.Audience)
+	}
+	if audience == "" {
+		return "", fmt.Errorf("audience is required")
+	}
+	return audience, nil
+}
 
 func (d *Daemon) triggerRefresh() {
 	if d.id == nil || d.cfg == nil {

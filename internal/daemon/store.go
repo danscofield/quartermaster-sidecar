@@ -25,6 +25,7 @@ type ManifestBillet struct {
 
 type ManifestSubscription struct {
 	Billets       []string `json:"billets"`
+	Audience      string   `json:"audience"`
 	Status        string   `json:"status"` // pending, ready
 	PendingReason string   `json:"pending_reason,omitempty"`
 	ExpiresAt     string   `json:"expires_at,omitempty"`
@@ -41,10 +42,11 @@ type billetCredential struct {
 }
 
 type subscription struct {
-	billets []string
-	status  string
-	reason  string
-	cred    billetCredential
+	billets  []string
+	audience string
+	status   string
+	reason   string
+	cred     billetCredential
 }
 
 func buildManifest(available []string, billets map[string]ManifestBillet, subs map[string]ManifestSubscription) Manifest {

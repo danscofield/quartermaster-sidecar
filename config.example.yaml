@@ -64,7 +64,7 @@ exchange:
   # Set false to only discover billets until workloads POST /subscriptions.
   # auto_per_billet: true
 
-  # Required for POST /token — typically your Quartermaster issuer URL.
+  # Default JWT audience for token exchange. Subscriptions may override via POST body.
   audience: http://localhost:8443
   subject_token_type: ""
 
