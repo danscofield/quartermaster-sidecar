@@ -22,6 +22,8 @@ identity:
     mode: mtls
 output:
   dir: /var/run/qm-agent
+exchange:
+  audience: https://qm.example.com
 `), 0o644)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +38,7 @@ output:
 	}
 }
 
-func TestLoadAWSRequiresMTLS(t *testing.T) {
+func TestLoadAWSWithoutClientMTLS(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(path, []byte(`
@@ -48,12 +50,40 @@ identity:
     region: us-east-1
 output:
   dir: /var/run/qm-agent
+exchange:
+  audience: https://qm.example.com
+`), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := config.Load(path); err != nil {
+		t.Fatalf("aws without client mTLS should be valid: %v", err)
+	}
+}
+
+func TestPartialClientMTLSRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(path, []byte(`
+quartermaster:
+  url: https://qm.example.com
+  mtls:
+    cert_file: /etc/qm/client.pem
+output:
+  dir: /var/run/qm-agent
+exchange:
+  audience: https://qm.example.com
+identity:
+  type: aws
+  aws:
+    region: us-east-1
 `), 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := config.Load(path); err == nil {
-		t.Fatal("expected validation error for missing mtls certs")
+		t.Fatal("expected error when only cert_file is set")
 	}
 }

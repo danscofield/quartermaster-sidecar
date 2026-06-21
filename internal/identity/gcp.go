@@ -55,7 +55,7 @@ func (s *gcpSource) Credential(ctx context.Context) (*Credential, error) {
 }
 
 func (s *gcpSource) TLSConfig(ctx context.Context) (*tls.Config, error) {
-	return tlsConfigFromFiles(s.cfg.Quartermaster.MTLS)
+	return QuartermasterTLS(s.cfg.Quartermaster.MTLS)
 }
 
 func (s *gcpSource) Close() error {

@@ -25,7 +25,7 @@ config.example.yaml   # Example configuration
 | `aws` | Presigned `sts:GetCallerIdentity` URL (`urn:quartermaster:token-type:aws-presigned-sts`) |
 | `gcp` | GCE metadata identity token (`urn:quartermaster:token-type:gcp-identity`) |
 
-Quartermaster's `/token` endpoint requires mTLS. For SPIRE `mtls` mode the SPIFFE certificate is used directly. For `aws` and `gcp`, configure `quartermaster.mtls` with a client certificate for the transport layer while the cloud identity is sent as `subject_token`.
+Quartermaster accepts identity via `subject_token` **or** a SPIFFE client certificate. Client mTLS to Quartermaster is only required for SPIRE `mtls` mode (the X.509 SVID is the client cert). For `aws`, `gcp`, and SPIRE `jwt`, identity is sent as `subject_token`; `quartermaster.mtls` is optional and typically only needs `ca_file` to verify the server.
 
 ## Billet discovery and output layout
 

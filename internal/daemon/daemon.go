@@ -84,23 +84,14 @@ func resolveTLS(ctx context.Context, cfg *config.Config, id identity.Source) (*t
 		return override, nil
 	}
 
-	if cfg.Quartermaster.MTLS.CertFile == "" {
-		return &tls.Config{MinVersion: tls.VersionTLS12}, nil
-	}
-
-	client, err := httpClientFromMTLS(cfg.Quartermaster.MTLS)
+	tlsCfg, err := identity.QuartermasterTLS(cfg.Quartermaster.MTLS)
 	if err != nil {
 		return nil, err
 	}
-	return client.Transport.(*http.Transport).TLSClientConfig, nil
-}
-
-func httpClientFromMTLS(mtls config.MTLSConfig) (*http.Client, error) {
-	return qmclient.NewHTTPClient(qmclient.MTLSConfig{
-		CertFile: mtls.CertFile,
-		KeyFile:  mtls.KeyFile,
-		CAFile:   mtls.CAFile,
-	})
+	if tlsCfg != nil {
+		return tlsCfg, nil
+	}
+	return &tls.Config{MinVersion: tls.VersionTLS12}, nil
 }
 
 func mergeRootCA(base *tls.Config, caFile string) (*tls.Config, error) {

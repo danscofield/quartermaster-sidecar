@@ -38,7 +38,7 @@ type IdentityConfig struct {
 
 type SPIREConfig struct {
 	// mtls: present SPIFFE X.509 SVID as the Quartermaster mTLS client cert (no subject_token).
-	// jwt: fetch a JWT SVID and send it as subject_token (still requires quartermaster.mtls).
+	// jwt:  JWT SVID sent as subject_token; quartermaster.mtls client cert is optional.
 	Mode string `yaml:"mode"`
 
 	SocketPath  string `yaml:"socket_path"`
@@ -159,17 +159,16 @@ func (c *Config) validate() error {
 		return fmt.Errorf("identity.type must be spire, aws, or gcp")
 	}
 
-	if c.Identity.Type != "spire" || c.Identity.SPIRE.Mode != "mtls" {
-		if c.Quartermaster.MTLS.CertFile == "" || c.Quartermaster.MTLS.KeyFile == "" {
-			return fmt.Errorf("quartermaster.mtls.cert_file and key_file are required for %s identity", c.Identity.Type)
-		}
-	}
-
 	if c.Output.Dir == "" {
 		return fmt.Errorf("output.dir is required")
 	}
 	if c.Exchange.Audience == "" {
 		return fmt.Errorf("exchange.audience is required for token exchange")
+	}
+	if c.Quartermaster.MTLS.CertFile != "" || c.Quartermaster.MTLS.KeyFile != "" {
+		if c.Quartermaster.MTLS.CertFile == "" || c.Quartermaster.MTLS.KeyFile == "" {
+			return fmt.Errorf("quartermaster.mtls.cert_file and key_file must both be set")
+		}
 	}
 	return nil
 }

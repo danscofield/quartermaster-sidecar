@@ -12,11 +12,12 @@
 quartermaster:
   url: https://quartermaster.example.com:8443
   mtls:
-    # Trust Quartermaster's CA. For SPIRE mtls mode you can omit cert/key here
-    # (the SPIFFE SVID is used as the client certificate instead).
+    # Optional. ca_file verifies Quartermaster's server cert.
+    # cert_file/key_file are only needed when NOT using SPIRE mtls mode
+    # (AWS/GCP/SPIRE jwt send identity via subject_token instead).
     ca_file: /etc/qm-agent/ca.pem
-    cert_file: /etc/qm-agent/client.pem
-    key_file: /etc/qm-agent/client-key.pem
+    # cert_file: /etc/qm-agent/client.pem
+    # key_file: /etc/qm-agent/client-key.pem
 
 identity:
   # ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ identity:
   type: spire
   spire:
     # mtls: identity from X.509 SVID (no subject_token sent)
-    # jwt:  JWT SVID sent as subject_token (quartermaster.mtls still required)
+    # jwt:  JWT SVID sent as subject_token (client mTLS to QM is optional)
     mode: mtls
     socket_path: unix:///tmp/spire-agent/public/api.sock
     jwt_audience: quartermaster.example.com
