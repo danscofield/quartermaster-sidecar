@@ -3,11 +3,11 @@
 # Copy to config.yaml and uncomment/adjust the identity block you need:
 #   cp config.example.yaml config.yaml
 #
-# Credential output (always per-billet):
-#   {output.dir}/manifest.json
-#   {output.dir}/billets/{name}/token
-#   {output.dir}/billets/{name}/key.pem   (csr.enabled)
-#   {output.dir}/billets/{name}/cert.pem  (csr.enabled)
+# Credential HTTP API (same paths as the former on-disk layout):
+#   GET /manifest.json
+#   GET /billets/{name}/token
+#   GET /billets/{name}/key.pem   (csr.enabled)
+#   GET /billets/{name}/cert.pem  (csr.enabled)
 
 quartermaster:
   url: https://quartermaster.example.com:8443
@@ -65,8 +65,8 @@ refresh:
 
 csr:
   # When true, generate a per-billet EC key, submit a CSR during exchange,
-  # and write the issued chain to cert.pem beside the token.
+  # and serve the issued chain at /billets/{name}/cert.pem.
   enabled: false
 
-output:
-  dir: /var/run/qm-agent
+server:
+  listen: 127.0.0.1:8765

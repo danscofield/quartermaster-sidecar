@@ -20,8 +20,8 @@ identity:
   type: spire
   spire:
     mode: mtls
-output:
-  dir: /var/run/qm-agent
+server:
+  listen: 127.0.0.1:8765
 exchange:
   audience: https://qm.example.com
 `), 0o644)
@@ -48,8 +48,8 @@ identity:
   type: aws
   aws:
     region: us-east-1
-output:
-  dir: /var/run/qm-agent
+server:
+  listen: 127.0.0.1:8765
 exchange:
   audience: https://qm.example.com
 `), 0o644)
@@ -70,8 +70,8 @@ quartermaster:
   url: https://qm.example.com
   mtls:
     cert_file: /etc/qm/client.pem
-output:
-  dir: /var/run/qm-agent
+server:
+  listen: 127.0.0.1:8765
 exchange:
   audience: https://qm.example.com
 identity:
@@ -85,5 +85,31 @@ identity:
 
 	if _, err := config.Load(path); err == nil {
 		t.Fatal("expected error when only cert_file is set")
+	}
+}
+
+func TestDefaultServerListen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(path, []byte(`
+quartermaster:
+  url: https://qm.example.com
+identity:
+  type: aws
+  aws:
+    region: us-east-1
+exchange:
+  audience: https://qm.example.com
+`), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server.Listen != "127.0.0.1:8765" {
+		t.Fatalf("listen = %q", cfg.Server.Listen)
 	}
 }

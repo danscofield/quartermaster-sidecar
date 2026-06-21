@@ -15,7 +15,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -24,13 +23,8 @@ import (
 	"github.com/dscof/qm-agent/qmclient"
 )
 
-type billetCredential struct {
-	token   string
-	expires time.Time
-	certPEM string
-}
-
-// Daemon exchanges workload identity for Quartermaster credentials on a refresh loop.
+// Daemon exchanges workload identity for Quartermaster credentials on a refresh loop
+// and serves them over HTTP.
 type Daemon struct {
 	cfg    *config.Config
 	id     identity.Source
@@ -39,6 +33,8 @@ type Daemon struct {
 
 	mu          sync.RWMutex
 	credentials map[string]billetCredential
+	manifest    map[string]ManifestBillet
+	keys        map[string][]byte // billet name -> EC private key PEM (CSR)
 }
 
 // New creates a daemon from configuration and an identity source.
@@ -71,6 +67,8 @@ func New(cfg *config.Config, id identity.Source, logger *slog.Logger) (*Daemon, 
 		api:         api,
 		logger:      logger,
 		credentials: make(map[string]billetCredential),
+		manifest:    make(map[string]ManifestBillet),
+		keys:        make(map[string][]byte),
 	}, nil
 }
 
@@ -112,9 +110,28 @@ func mergeRootCA(base *tls.Config, caFile string) (*tls.Config, error) {
 	return cfg, nil
 }
 
-// Run performs an initial exchange then refreshes until ctx is cancelled.
+// Run starts the credential HTTP server and the refresh loop until ctx is cancelled.
 func (d *Daemon) Run(ctx context.Context) error {
 	defer d.id.Close()
+
+	srv := &http.Server{
+		Addr:    d.cfg.Server.Listen,
+		Handler: d.handler(),
+	}
+
+	go func() {
+		d.logger.Info("credential server listening", "addr", d.cfg.Server.Listen)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			d.logger.Error("credential server", "error", err)
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
 
 	if err := d.refresh(ctx); err != nil {
 		return err
@@ -171,11 +188,9 @@ func (d *Daemon) refresh(ctx context.Context) error {
 		d.logger.Info("no entitled billets")
 		d.mu.Lock()
 		d.credentials = make(map[string]billetCredential)
+		d.manifest = make(map[string]ManifestBillet)
 		d.mu.Unlock()
-		if err := writeManifest(d.cfg.Output.Dir, map[string]ManifestBillet{}); err != nil {
-			return err
-		}
-		return pruneBilletDirs(d.cfg.Output.Dir, map[string]struct{}{})
+		return nil
 	}
 
 	d.logger.Info("refreshing billets", "count", len(billets), "discovered", len(d.cfg.Exchange.Billets) == 0)
@@ -194,31 +209,29 @@ func (d *Daemon) refresh(ctx context.Context) error {
 			continue
 		}
 
-		paths := billetPaths(d.cfg.Output.Dir, name)
 		expires := time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
-
-		if err := writeFileAtomic(paths.TokenFile, []byte(resp.AccessToken), 0o600); err != nil {
-			refreshErr = errors.Join(refreshErr, fmt.Errorf("%s: write token: %w", name, err))
-			continue
-		}
+		base := billetBasePath(name)
 
 		entry := ManifestBillet{
 			Name:      name,
 			ExpiresAt: expires.UTC().Format(time.RFC3339),
-			TokenPath: paths.TokenFile,
+			TokenPath: base + "/token",
 		}
 
 		certPEM := ""
 		if resp.CertificateChain != nil {
 			certPEM = *resp.CertificateChain
 		}
-		if d.cfg.CSR.Enabled && certPEM != "" {
-			if err := writeFileAtomic(paths.CertFile, []byte(certPEM), 0o644); err != nil {
-				refreshErr = errors.Join(refreshErr, fmt.Errorf("%s: write cert: %w", name, err))
-				continue
+
+		keyPEM := ""
+		if d.cfg.CSR.Enabled {
+			if k, ok := d.keyPEM(name); ok {
+				keyPEM = string(k)
 			}
-			entry.CertPath = paths.CertFile
-			entry.KeyPath = paths.KeyFile
+			if certPEM != "" {
+				entry.CertPath = base + "/cert.pem"
+				entry.KeyPath = base + "/key.pem"
+			}
 		}
 
 		manifest[name] = entry
@@ -226,6 +239,7 @@ func (d *Daemon) refresh(ctx context.Context) error {
 			token:   resp.AccessToken,
 			expires: expires,
 			certPEM: certPEM,
+			keyPEM:  keyPEM,
 		}
 
 		d.logger.Info("exchanged credentials",
@@ -237,15 +251,38 @@ func (d *Daemon) refresh(ctx context.Context) error {
 
 	d.mu.Lock()
 	d.credentials = updated
+	d.manifest = manifest
+	// Drop keys for billets no longer entitled.
+	for name := range d.keys {
+		if _, ok := active[name]; !ok {
+			delete(d.keys, name)
+		}
+	}
 	d.mu.Unlock()
 
-	if err := writeManifest(d.cfg.Output.Dir, manifest); err != nil {
-		return err
-	}
-	if err := pruneBilletDirs(d.cfg.Output.Dir, active); err != nil {
-		return err
-	}
 	return refreshErr
+}
+
+func (d *Daemon) keyPEM(billetName string) ([]byte, bool) {
+	d.mu.RLock()
+	k, ok := d.keys[billetName]
+	d.mu.RUnlock()
+	if ok {
+		return k, true
+	}
+
+	k, err := generateKeyPEM()
+	if err != nil {
+		return nil, false
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if existing, ok := d.keys[billetName]; ok {
+		return existing, true
+	}
+	d.keys[billetName] = k
+	return k, true
 }
 
 func (d *Daemon) exchangeBillet(ctx context.Context, cred *identity.Credential, billetName string) (*qmclient.TokenExchangeResponse, error) {
@@ -267,12 +304,11 @@ func (d *Daemon) exchangeBillet(ctx context.Context, cred *identity.Credential, 
 	}
 
 	if d.cfg.CSR.Enabled {
-		paths := billetPaths(d.cfg.Output.Dir, billetName)
-		csrPEM, err := d.loadOrCreateCSR(paths.KeyFile, billetName)
+		csrB64, err := d.createCSR(billetName)
 		if err != nil {
 			return nil, err
 		}
-		form.Csr = &csrPEM
+		form.Csr = &csrB64
 	}
 
 	resp, err := d.api.ExchangeToken(ctx, form)
@@ -282,21 +318,15 @@ func (d *Daemon) exchangeBillet(ctx context.Context, cred *identity.Credential, 
 	return resp, nil
 }
 
-func (d *Daemon) loadOrCreateCSR(keyPath, billetName string) (string, error) {
-	keyPEM, err := os.ReadFile(keyPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		keyPEM, err = generateKeyPEM(keyPath)
-		if err != nil {
-			return "", err
-		}
+func (d *Daemon) createCSR(billetName string) (string, error) {
+	keyPEM, ok := d.keyPEM(billetName)
+	if !ok {
+		return "", fmt.Errorf("generate key for %s", billetName)
 	}
 
 	block, _ := pem.Decode(keyPEM)
 	if block == nil {
-		return "", fmt.Errorf("decode private key from %s", keyPath)
+		return "", fmt.Errorf("decode private key for %s", billetName)
 	}
 
 	key, err := x509.ParseECPrivateKey(block.Bytes)
@@ -311,11 +341,10 @@ func (d *Daemon) loadOrCreateCSR(keyPath, billetName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Quartermaster expects base64-encoded CSR DER in the token exchange form.
 	return base64.StdEncoding.EncodeToString(der), nil
 }
 
-func generateKeyPEM(path string) ([]byte, error) {
+func generateKeyPEM() ([]byte, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
@@ -324,33 +353,7 @@ func generateKeyPEM(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
-	if err := writeFileAtomic(path, pemBytes, 0o600); err != nil {
-		return nil, err
-	}
-	return pemBytes, nil
-}
-
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, mode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), nil
 }
 
 func strPtr(s string) *string { return &s }
-
-// Credentials returns a snapshot of current billet credentials.
-func (d *Daemon) Credentials() map[string]billetCredential {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	out := make(map[string]billetCredential, len(d.credentials))
-	for k, v := range d.credentials {
-		out[k] = v
-	}
-	return out
-}

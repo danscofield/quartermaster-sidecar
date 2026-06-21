@@ -43,7 +43,7 @@ func main() {
 	logger.Info("starting qm-agentd",
 		"quartermaster", cfg.Quartermaster.URL,
 		"identity", cfg.Identity.Type,
-		"output_dir", cfg.Output.Dir,
+		"listen", cfg.Server.Listen,
 		"billets", cfg.Exchange.Billets,
 	)
 

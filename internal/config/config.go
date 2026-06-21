@@ -15,7 +15,7 @@ type Config struct {
 	Exchange      ExchangeConfig      `yaml:"exchange"`
 	Refresh       RefreshConfig       `yaml:"refresh"`
 	CSR           CSRConfig           `yaml:"csr"`
-	Output        OutputConfig        `yaml:"output"`
+	Server        ServerConfig        `yaml:"server"`
 }
 
 type QuartermasterConfig struct {
@@ -37,10 +37,7 @@ type IdentityConfig struct {
 }
 
 type SPIREConfig struct {
-	// mtls: present SPIFFE X.509 SVID as the Quartermaster mTLS client cert (no subject_token).
-	// jwt:  JWT SVID sent as subject_token; quartermaster.mtls client cert is optional.
-	Mode string `yaml:"mode"`
-
+	Mode        string `yaml:"mode"`
 	SocketPath  string `yaml:"socket_path"`
 	JWTAudience string `yaml:"jwt_audience"`
 }
@@ -57,8 +54,6 @@ type GCPConfig struct {
 }
 
 type ExchangeConfig struct {
-	// When empty, the daemon calls POST /billets/me and exchanges once per entitled billet.
-	// When set, exchanges only for the listed billets (one token per billet).
 	Billets          []string `yaml:"billets"`
 	GrantType        string   `yaml:"grant_type"`
 	Audience         string   `yaml:"audience"`
@@ -73,10 +68,9 @@ type CSRConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
-type OutputConfig struct {
-	// Root directory for credential material. Each billet is written under
-	// {dir}/billets/{name}/ with token, and optionally key.pem + cert.pem.
-	Dir string `yaml:"dir"`
+type ServerConfig struct {
+	// Listen address for the credential HTTP API (e.g. 127.0.0.1:8765).
+	Listen string `yaml:"listen"`
 }
 
 // Load reads and validates configuration from a YAML file.
@@ -106,6 +100,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Exchange.Audience == "" && c.Quartermaster.URL != "" {
 		c.Exchange.Audience = c.Quartermaster.URL
+	}
+	if c.Server.Listen == "" {
+		c.Server.Listen = "127.0.0.1:8765"
 	}
 	if c.Identity.SPIRE != nil {
 		if c.Identity.SPIRE.Mode == "" {
@@ -159,8 +156,8 @@ func (c *Config) validate() error {
 		return fmt.Errorf("identity.type must be spire, aws, or gcp")
 	}
 
-	if c.Output.Dir == "" {
-		return fmt.Errorf("output.dir is required")
+	if c.Server.Listen == "" {
+		return fmt.Errorf("server.listen is required")
 	}
 	if c.Exchange.Audience == "" {
 		return fmt.Errorf("exchange.audience is required for token exchange")

@@ -2,7 +2,7 @@
 
 Go client library and daemon for [Quartermaster](https://github.com/dscof/qm-agent) — a workload identity federation broker.
 
-The daemon (`qm-agentd`) runs on a workload, obtains identity from the local environment, and exchanges it with Quartermaster for short-lived JWTs and optional certificates.
+The daemon (`qm-agentd`) runs on a workload, obtains identity from the local environment, exchanges it with Quartermaster for short-lived JWTs and optional certificates, and serves credentials over HTTP.
 
 ## Layout
 
@@ -12,7 +12,7 @@ qmclient/             # Generated + hand-written Go client
 internal/
   config/             # Daemon YAML configuration
   identity/           # Pluggable workload identity sources
-  daemon/             # Token exchange refresh loop
+  daemon/             # Token exchange refresh loop + HTTP API
 cmd/qm-agentd/        # Daemon entrypoint
 config.example.yaml   # Example configuration
 ```
@@ -27,28 +27,23 @@ config.example.yaml   # Example configuration
 
 Quartermaster accepts identity via `subject_token` **or** a SPIFFE client certificate. Client mTLS to Quartermaster is only required for SPIRE `mtls` mode (the X.509 SVID is the client cert). For `aws`, `gcp`, and SPIRE `jwt`, identity is sent as `subject_token`; `quartermaster.mtls` is optional and typically only needs `ca_file` to verify the server.
 
-## Billet discovery and output layout
+## Credential HTTP API
 
-When `exchange.billets` is **empty**, the daemon calls `POST /billets/me`, unions `billets`, `implicit_billets`, and `cedar_billets`, then performs **one token exchange per billet**.
+When `exchange.billets` is **empty**, the daemon calls `POST /billets/me`, unions entitled billets, then performs **one token exchange per billet**. Credentials are held in memory and exposed at:
 
-When `exchange.billets` is **set**, it skips discovery and exchanges only for those names (still one token per billet).
+| Endpoint | Content |
+|----------|---------|
+| `GET /manifest.json` | Index of billets with paths and expiry |
+| `GET /billets/{name}/token` | Quartermaster access token (JWT) |
+| `GET /billets/{name}/cert.pem` | Issued certificate chain (`csr.enabled`) |
+| `GET /billets/{name}/key.pem` | EC private key for the cert (`csr.enabled`) |
 
-Credentials are written under `output.dir` using a per-billet directory layout:
+Default listen address: `127.0.0.1:8765` (configure with `server.listen`).
 
+```bash
+curl -s http://127.0.0.1:8765/manifest.json | jq .
+curl -s http://127.0.0.1:8765/billets/payments/token
 ```
-/var/run/qm-agent/
-  manifest.json
-  billets/
-    payments/
-      token
-      key.pem      # when csr.enabled
-      cert.pem     # when csr.enabled
-    analytics/
-      token
-      ...
-```
-
-`manifest.json` lists each active billet with expiry and file paths so consumers do not need to scan directories. Stale billet directories are removed when a billet is no longer entitled.
 
 Refresh is scheduled from the **earliest** token expiry across all billets.
 
@@ -69,8 +64,6 @@ See [`config.example.yaml`](config.example.yaml) for all options.
 quartermaster:
   url: https://quartermaster.example.com
   mtls:
-    cert_file: /etc/qm-agent/client.pem
-    key_file: /etc/qm-agent/client-key.pem
     ca_file: /etc/qm-agent/ca.pem
 
 identity:
@@ -79,10 +72,11 @@ identity:
     region: us-east-1
 
 exchange:
-  billets: []   # empty = discover all entitled billets
+  billets: []
+  audience: https://quartermaster.example.com
 
-output:
-  dir: /var/run/qm-agent
+server:
+  listen: 127.0.0.1:8765
 ```
 
 Environment:
