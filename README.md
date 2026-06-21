@@ -7,7 +7,8 @@ The daemon (`qm-agentd`) runs on a workload, obtains identity from the local env
 ## Layout
 
 ```
-openapi.json          # Source OpenAPI 3.1 spec
+openapi.json          # Quartermaster broker API (client codegen)
+agent.openapi.json    # qm-agentd credential API (embedded, served at GET /openapi.json)
 qmclient/             # Generated + hand-written Go client
 internal/
   config/             # Daemon YAML configuration
@@ -29,23 +30,40 @@ Quartermaster accepts identity via `subject_token` **or** a SPIFFE client certif
 
 ## Credential HTTP API
 
-When `exchange.billets` is **empty**, the daemon calls `POST /billets/me`, unions entitled billets, then performs **one token exchange per billet**. Credentials are held in memory and exposed at:
+The daemon discovers entitled billets via `POST /billets/me` (or uses `exchange.billets` when set). By default it also performs **one token exchange per billet** (`exchange.auto_per_billet: true`). Set `auto_per_billet: false` to discover only and let workloads request **combined** credentials for a subset via subscriptions.
+
+**Self-documenting:** `GET /` returns service links; `GET /openapi.json` serves the OpenAPI 3.1 spec; `GET /docs` is Swagger UI. The manifest includes `openapi_url` and `docs_url`.
 
 | Endpoint | Content |
 |----------|---------|
-| `GET /manifest.json` | Index of billets with paths and expiry |
-| `GET /billets/{name}/token` | Quartermaster access token (JWT) |
-| `GET /billets/{name}/cert.pem` | Issued certificate chain (`csr.enabled`) |
-| `GET /billets/{name}/key.pem` | EC private key for the cert (`csr.enabled`) |
+| `GET /` | Service index with links to manifest, OpenAPI, and docs |
+| `GET /openapi.json` | OpenAPI 3.1 specification for this API |
+| `GET /docs` | Swagger UI (loads `/openapi.json`) |
+| `GET /manifest.json` | Available billets, per-billet credentials (if auto), and subscriptions |
+| `GET /billets/{name}/token` | Per-billet JWT (`auto_per_billet`) |
+| `GET /billets/{name}/cert.pem` | Per-billet cert chain (`csr.enabled`) |
+| `GET /billets/{name}/key.pem` | Per-billet EC private key (`csr.enabled`) |
+| `POST /subscriptions` | Subscribe to a billet list; exchanges when all are available |
+| `GET /subscriptions` | List subscriptions |
+| `GET /subscriptions/{id}` | Subscription status |
+| `DELETE /subscriptions/{id}` | Remove a subscription |
+| `GET /subscriptions/{id}/token` | Combined JWT for the subscribed billets |
+| `GET /subscriptions/{id}/cert.pem` | Combined cert (`csr.enabled`) |
+| `GET /subscriptions/{id}/key.pem` | Combined key (`csr.enabled`) |
 
 Default listen address: `127.0.0.1:8765` (configure with `server.listen`).
 
 ```bash
 curl -s http://127.0.0.1:8765/manifest.json | jq .
-curl -s http://127.0.0.1:8765/billets/payments/token
+
+# Combined credentials for payments + analytics (one QM /token call):
+curl -s -X POST http://127.0.0.1:8765/subscriptions \
+  -H 'Content-Type: application/json' \
+  -d '{"billets":["payments","analytics"]}' | jq .
+curl -s http://127.0.0.1:8765/subscriptions/analytics__payments/token
 ```
 
-Refresh is scheduled from the **earliest** token expiry across all billets.
+Refresh is scheduled from the **earliest** token expiry across per-billet and subscription credentials.
 
 ## Quick start
 

@@ -55,6 +55,9 @@ type GCPConfig struct {
 
 type ExchangeConfig struct {
 	Billets          []string `yaml:"billets"`
+	// AutoPerBillet exchanges one token per entitled billet on each refresh.
+	// When false, only discovery runs until workloads POST /subscriptions.
+	AutoPerBillet    *bool    `yaml:"auto_per_billet,omitempty"`
 	GrantType        string   `yaml:"grant_type"`
 	Audience         string   `yaml:"audience"`
 	SubjectTokenType string   `yaml:"subject_token_type"`
@@ -97,6 +100,10 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Exchange.GrantType == "" {
 		c.Exchange.GrantType = "urn:ietf:params:oauth:grant-type:token-exchange"
+	}
+	if c.Exchange.AutoPerBillet == nil {
+		t := true
+		c.Exchange.AutoPerBillet = &t
 	}
 	if c.Exchange.Audience == "" && c.Quartermaster.URL != "" {
 		c.Exchange.Audience = c.Quartermaster.URL
@@ -168,4 +175,9 @@ func (c *Config) validate() error {
 		}
 	}
 	return nil
+}
+
+// AutoPerBilletEnabled reports whether the daemon should exchange per entitled billet.
+func (c *Config) AutoPerBilletEnabled() bool {
+	return c.Exchange.AutoPerBillet == nil || *c.Exchange.AutoPerBillet
 }

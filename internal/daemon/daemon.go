@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,10 +32,12 @@ type Daemon struct {
 	api    *qmclient.API
 	logger *slog.Logger
 
-	mu          sync.RWMutex
-	credentials map[string]billetCredential
-	manifest    map[string]ManifestBillet
-	keys        map[string][]byte // billet name -> EC private key PEM (CSR)
+	mu            sync.RWMutex
+	available     []string
+	credentials   map[string]billetCredential
+	manifest      map[string]ManifestBillet
+	subscriptions map[string]*subscription
+	keys          map[string][]byte // billet name or subscription id -> EC private key PEM
 }
 
 // New creates a daemon from configuration and an identity source.
@@ -62,13 +65,14 @@ func New(cfg *config.Config, id identity.Source, logger *slog.Logger) (*Daemon, 
 	}
 
 	return &Daemon{
-		cfg:         cfg,
-		id:          id,
-		api:         api,
-		logger:      logger,
-		credentials: make(map[string]billetCredential),
-		manifest:    make(map[string]ManifestBillet),
-		keys:        make(map[string][]byte),
+		cfg:           cfg,
+		id:            id,
+		api:           api,
+		logger:        logger,
+		credentials:   make(map[string]billetCredential),
+		manifest:      make(map[string]ManifestBillet),
+		subscriptions: make(map[string]*subscription),
+		keys:          make(map[string][]byte),
 	}, nil
 }
 
@@ -156,15 +160,23 @@ func (d *Daemon) timeUntilRefresh() time.Duration {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	if len(d.credentials) == 0 {
-		return time.Minute
-	}
-
 	earliest := time.Time{}
 	for _, cred := range d.credentials {
 		if earliest.IsZero() || cred.expires.Before(earliest) {
 			earliest = cred.expires
 		}
+	}
+	for _, sub := range d.subscriptions {
+		if sub.status != "ready" {
+			continue
+		}
+		if earliest.IsZero() || sub.cred.expires.Before(earliest) {
+			earliest = sub.cred.expires
+		}
+	}
+
+	if earliest.IsZero() {
+		return time.Minute
 	}
 
 	wait := time.Until(earliest.Add(-d.cfg.Refresh.Margin))
@@ -184,17 +196,34 @@ func (d *Daemon) refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	d.mu.Lock()
+	d.available = append([]string(nil), billets...)
+	d.mu.Unlock()
+
+	avail := availableSet(billets)
+	var refreshErr error
+
 	if len(billets) == 0 {
 		d.logger.Info("no entitled billets")
+	} else {
+		d.logger.Info("discovered billets", "count", len(billets), "configured", len(d.cfg.Exchange.Billets) > 0)
+	}
+
+	if d.cfg.AutoPerBilletEnabled() && len(billets) > 0 {
+		refreshErr = errors.Join(refreshErr, d.refreshAutoBillets(ctx, cred, billets))
+	} else if !d.cfg.AutoPerBilletEnabled() {
 		d.mu.Lock()
 		d.credentials = make(map[string]billetCredential)
 		d.manifest = make(map[string]ManifestBillet)
 		d.mu.Unlock()
-		return nil
 	}
 
-	d.logger.Info("refreshing billets", "count", len(billets), "discovered", len(d.cfg.Exchange.Billets) == 0)
+	refreshErr = errors.Join(refreshErr, d.refreshSubscriptions(ctx, cred, avail))
+	return refreshErr
+}
 
+func (d *Daemon) refreshAutoBillets(ctx context.Context, cred *identity.Credential, billets []string) error {
 	manifest := make(map[string]ManifestBillet, len(billets))
 	active := make(map[string]struct{}, len(billets))
 	updated := make(map[string]billetCredential, len(billets))
@@ -203,59 +232,31 @@ func (d *Daemon) refresh(ctx context.Context) error {
 	for _, name := range billets {
 		active[name] = struct{}{}
 
-		resp, err := d.exchangeBillet(ctx, cred, name)
+		resp, err := d.exchangeBillets(ctx, cred, []string{name}, name, name)
 		if err != nil {
 			refreshErr = errors.Join(refreshErr, fmt.Errorf("%s: %w", name, err))
 			continue
 		}
 
-		expires := time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
-		base := billetBasePath(name)
-
-		entry := ManifestBillet{
-			Name:      name,
-			ExpiresAt: expires.UTC().Format(time.RFC3339),
-			TokenPath: base + "/token",
-		}
-
-		certPEM := ""
-		if resp.CertificateChain != nil {
-			certPEM = *resp.CertificateChain
-		}
-
-		keyPEM := ""
-		if d.cfg.CSR.Enabled {
-			if k, ok := d.keyPEM(name); ok {
-				keyPEM = string(k)
-			}
-			if certPEM != "" {
-				entry.CertPath = base + "/cert.pem"
-				entry.KeyPath = base + "/key.pem"
-			}
-		}
-
+		entry, bcred := d.credentialFromResponse(name, billetBasePath(name), name, resp)
 		manifest[name] = entry
-		updated[name] = billetCredential{
-			token:   resp.AccessToken,
-			expires: expires,
-			certPEM: certPEM,
-			keyPEM:  keyPEM,
-		}
+		updated[name] = bcred
 
 		d.logger.Info("exchanged credentials",
 			"billet", name,
 			"expires_at", entry.ExpiresAt,
-			"has_certificate", certPEM != "",
+			"has_certificate", bcred.certPEM != "",
 		)
 	}
 
 	d.mu.Lock()
 	d.credentials = updated
 	d.manifest = manifest
-	// Drop keys for billets no longer entitled.
 	for name := range d.keys {
 		if _, ok := active[name]; !ok {
-			delete(d.keys, name)
+			if _, isSub := d.subscriptions[name]; !isSub {
+				delete(d.keys, name)
+			}
 		}
 	}
 	d.mu.Unlock()
@@ -263,9 +264,89 @@ func (d *Daemon) refresh(ctx context.Context) error {
 	return refreshErr
 }
 
-func (d *Daemon) keyPEM(billetName string) ([]byte, bool) {
+func (d *Daemon) refreshSubscriptions(ctx context.Context, cred *identity.Credential, avail map[string]struct{}) error {
 	d.mu.RLock()
-	k, ok := d.keys[billetName]
+	subs := make([]*subscription, 0, len(d.subscriptions))
+	ids := make([]string, 0, len(d.subscriptions))
+	for id, sub := range d.subscriptions {
+		ids = append(ids, id)
+		subs = append(subs, sub)
+	}
+	d.mu.RUnlock()
+
+	var refreshErr error
+	for i, id := range ids {
+		sub := subs[i]
+		ok, missing := billetsAvailable(sub.billets, avail)
+		if !ok {
+			d.mu.Lock()
+			sub.status = "pending"
+			sub.reason = fmt.Sprintf("waiting for billet(s): %s", strings.Join(missing, ", "))
+			d.mu.Unlock()
+			continue
+		}
+
+		resp, err := d.exchangeBillets(ctx, cred, sub.billets, id, strings.Join(sub.billets, ","))
+		if err != nil {
+			refreshErr = errors.Join(refreshErr, fmt.Errorf("subscription %s: %w", id, err))
+			continue
+		}
+
+		base := subscriptionBasePath(id)
+		entry, bcred := d.credentialFromResponse(id, base, id, resp)
+
+		d.mu.Lock()
+		sub.status = "ready"
+		sub.reason = ""
+		sub.cred = bcred
+		d.mu.Unlock()
+
+		d.logger.Info("exchanged subscription credentials",
+			"subscription", id,
+			"billets", sub.billets,
+			"expires_at", entry.ExpiresAt,
+			"has_certificate", bcred.certPEM != "",
+		)
+	}
+
+	return refreshErr
+}
+
+func (d *Daemon) credentialFromResponse(name, base, keyID string, resp *qmclient.TokenExchangeResponse) (ManifestBillet, billetCredential) {
+	expires := time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
+	entry := ManifestBillet{
+		Name:      name,
+		ExpiresAt: expires.UTC().Format(time.RFC3339),
+		TokenPath: base + "/token",
+	}
+
+	certPEM := ""
+	if resp.CertificateChain != nil {
+		certPEM = *resp.CertificateChain
+	}
+
+	keyPEM := ""
+	if d.cfg.CSR.Enabled {
+		if k, ok := d.keyPEM(keyID); ok {
+			keyPEM = string(k)
+		}
+		if certPEM != "" {
+			entry.CertPath = base + "/cert.pem"
+			entry.KeyPath = base + "/key.pem"
+		}
+	}
+
+	return entry, billetCredential{
+		token:   resp.AccessToken,
+		expires: expires,
+		certPEM: certPEM,
+		keyPEM:  keyPEM,
+	}
+}
+
+func (d *Daemon) keyPEM(keyID string) ([]byte, bool) {
+	d.mu.RLock()
+	k, ok := d.keys[keyID]
 	d.mu.RUnlock()
 	if ok {
 		return k, true
@@ -278,17 +359,18 @@ func (d *Daemon) keyPEM(billetName string) ([]byte, bool) {
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if existing, ok := d.keys[billetName]; ok {
+	if existing, ok := d.keys[keyID]; ok {
 		return existing, true
 	}
-	d.keys[billetName] = k
+	d.keys[keyID] = k
 	return k, true
 }
 
-func (d *Daemon) exchangeBillet(ctx context.Context, cred *identity.Credential, billetName string) (*qmclient.TokenExchangeResponse, error) {
+func (d *Daemon) exchangeBillets(ctx context.Context, cred *identity.Credential, billetNames []string, keyID, csrCN string) (*qmclient.TokenExchangeResponse, error) {
+	joined := strings.Join(billetNames, ",")
 	form := qmclient.TokenExchangeForm{
 		GrantType: strPtr(d.cfg.Exchange.GrantType),
-		Billets:   strPtr(billetName),
+		Billets:   &joined,
 	}
 	if d.cfg.Exchange.Audience != "" {
 		form.Audience = &d.cfg.Exchange.Audience
@@ -304,7 +386,7 @@ func (d *Daemon) exchangeBillet(ctx context.Context, cred *identity.Credential, 
 	}
 
 	if d.cfg.CSR.Enabled {
-		csrB64, err := d.createCSR(billetName)
+		csrB64, err := d.createCSR(keyID, csrCN)
 		if err != nil {
 			return nil, err
 		}
@@ -318,15 +400,15 @@ func (d *Daemon) exchangeBillet(ctx context.Context, cred *identity.Credential, 
 	return resp, nil
 }
 
-func (d *Daemon) createCSR(billetName string) (string, error) {
-	keyPEM, ok := d.keyPEM(billetName)
+func (d *Daemon) createCSR(keyID, commonName string) (string, error) {
+	keyPEM, ok := d.keyPEM(keyID)
 	if !ok {
-		return "", fmt.Errorf("generate key for %s", billetName)
+		return "", fmt.Errorf("generate key for %s", keyID)
 	}
 
 	block, _ := pem.Decode(keyPEM)
 	if block == nil {
-		return "", fmt.Errorf("decode private key for %s", billetName)
+		return "", fmt.Errorf("decode private key for %s", keyID)
 	}
 
 	key, err := x509.ParseECPrivateKey(block.Bytes)
@@ -335,7 +417,7 @@ func (d *Daemon) createCSR(billetName string) (string, error) {
 	}
 
 	tmpl := &x509.CertificateRequest{
-		Subject: pkix.Name{CommonName: billetName},
+		Subject: pkix.Name{CommonName: commonName},
 	}
 	der, err := x509.CreateCertificateRequest(rand.Reader, tmpl, key)
 	if err != nil {
@@ -357,3 +439,16 @@ func generateKeyPEM() ([]byte, error) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func (d *Daemon) triggerRefresh() {
+	if d.id == nil || d.cfg == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := d.refresh(ctx); err != nil {
+			d.logger.Error("subscription refresh failed", "error", err)
+		}
+	}()
+}

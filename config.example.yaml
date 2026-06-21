@@ -3,11 +3,16 @@
 # Copy to config.yaml and uncomment/adjust the identity block you need:
 #   cp config.example.yaml config.yaml
 #
-# Credential HTTP API (same paths as the former on-disk layout):
+# Credential HTTP API (see agent.openapi.json and GET /openapi.json when running):
+#   GET /
+#   GET /openapi.json
+#   GET /docs
 #   GET /manifest.json
 #   GET /billets/{name}/token
 #   GET /billets/{name}/key.pem   (csr.enabled)
 #   GET /billets/{name}/cert.pem  (csr.enabled)
+#   POST /subscriptions           {"billets": ["a", "b"]}
+#   GET /subscriptions/{id}/token (combined exchange when all billets are available)
 
 quartermaster:
   url: https://quartermaster.example.com:8443
@@ -51,9 +56,13 @@ identity:
 exchange:
   grant_type: urn:ietf:params:oauth:grant-type:token-exchange
 
-  # Empty list → POST /billets/me, then one token exchange per entitled billet.
-  # Non-empty → skip discovery; exchange only these billets (one token each).
+  # Empty list → POST /billets/me for discovery.
+  # Non-empty → skip discovery; use this fixed billet list.
   billets: []
+
+  # When true (default), exchange one token per entitled billet on each refresh.
+  # Set false to only discover billets until workloads POST /subscriptions.
+  # auto_per_billet: true
 
   # Required for POST /token — typically your Quartermaster issuer URL.
   audience: http://localhost:8443

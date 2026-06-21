@@ -1,0 +1,494 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "qm-agentd Credential API",
+    "description": "Local HTTP API served by qm-agentd. Workloads read Quartermaster credentials from this server after the daemon exchanges workload identity for tokens (and optional certificates).\n\nDiscovery flow:\n1. GET /manifest.json — entitled billets and active credentials\n2. POST /subscriptions — request a combined token for a billet subset\n3. GET credential paths from the manifest or subscription response\n\nPer-billet credentials are populated when exchange.auto_per_billet is enabled in the daemon config.",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "qm-agentd listen address (default 127.0.0.1:8765)"
+    }
+  ],
+  "tags": [
+    { "name": "discovery", "description": "Service metadata and manifest" },
+    { "name": "billets", "description": "Per-billet credentials (auto_per_billet mode)" },
+    { "name": "subscriptions", "description": "Combined credentials for a billet subset" }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "tags": ["discovery"],
+        "summary": "Service index",
+        "description": "Returns links to the manifest and OpenAPI document.",
+        "operationId": "service_index",
+        "responses": {
+          "200": {
+            "description": "Service metadata",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ServiceIndex" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": ["discovery"],
+        "summary": "OpenAPI document",
+        "description": "Machine-readable description of this API (this document).",
+        "operationId": "openapi_document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 specification",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "tags": ["discovery"],
+        "summary": "Interactive API documentation",
+        "description": "Swagger UI for exploring and trying this API.",
+        "operationId": "api_docs",
+        "responses": {
+          "200": {
+            "description": "Swagger UI HTML page",
+            "content": {
+              "text/html": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest.json": {
+      "get": {
+        "tags": ["discovery"],
+        "summary": "Credential manifest",
+        "description": "Lists entitled billets (available), per-billet credential paths when auto exchange is enabled, and active subscriptions.",
+        "operationId": "get_manifest",
+        "responses": {
+          "200": {
+            "description": "Current credential manifest",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Manifest" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/billets/{name}/token": {
+      "get": {
+        "tags": ["billets"],
+        "summary": "Per-billet JWT",
+        "description": "Returns the Quartermaster access token (JWT) for a single billet when auto_per_billet exchange is enabled.",
+        "operationId": "get_billet_token",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Billet name (URL-safe; non-alphanumeric characters are replaced with `_`)",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JWT access token",
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "byte" }
+              }
+            }
+          },
+          "404": { "description": "Billet not found or no token available" }
+        }
+      }
+    },
+    "/billets/{name}/cert.pem": {
+      "get": {
+        "tags": ["billets"],
+        "summary": "Per-billet certificate chain",
+        "description": "Returns the issued PEM certificate chain when csr.enabled is true in the daemon config.",
+        "operationId": "get_billet_cert",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM certificate chain",
+            "content": {
+              "application/x-pem-file": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "404": { "description": "Billet not found or certificate not available" }
+        }
+      }
+    },
+    "/billets/{name}/key.pem": {
+      "get": {
+        "tags": ["billets"],
+        "summary": "Per-billet private key",
+        "description": "Returns the EC private key PEM paired with the billet certificate when csr.enabled is true.",
+        "operationId": "get_billet_key",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM EC private key",
+            "content": {
+              "application/x-pem-file": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "404": { "description": "Billet not found or key not available" }
+        }
+      }
+    },
+    "/subscriptions": {
+      "get": {
+        "tags": ["subscriptions"],
+        "summary": "List subscriptions",
+        "operationId": "list_subscriptions",
+        "responses": {
+          "200": {
+            "description": "All active subscriptions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Subscription" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["subscriptions"],
+        "summary": "Create or refresh a subscription",
+        "description": "Subscribe to a sorted, deduplicated list of billets. When all billets appear in manifest.available, the daemon performs one combined Quartermaster token exchange. Subscription id is the sorted billet names joined with `__` (sanitized for URLs).",
+        "operationId": "create_subscription",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateSubscriptionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Subscription created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Subscription" }
+              }
+            }
+          },
+          "200": {
+            "description": "Subscription already exists (refresh triggered)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Subscription" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or billet list",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/subscriptions/{id}": {
+      "get": {
+        "tags": ["subscriptions"],
+        "summary": "Get subscription status",
+        "operationId": "get_subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Subscription id (e.g. analytics__payments)",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription details",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Subscription" }
+              }
+            }
+          },
+          "404": { "description": "Subscription not found" }
+        }
+      },
+      "delete": {
+        "tags": ["subscriptions"],
+        "summary": "Delete a subscription",
+        "operationId": "delete_subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Subscription removed" },
+          "404": { "description": "Subscription not found" }
+        }
+      }
+    },
+    "/subscriptions/{id}/token": {
+      "get": {
+        "tags": ["subscriptions"],
+        "summary": "Combined subscription JWT",
+        "description": "Returns the combined Quartermaster access token when subscription status is ready.",
+        "operationId": "get_subscription_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JWT access token",
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "byte" }
+              }
+            }
+          },
+          "404": { "description": "Subscription not found or not ready" }
+        }
+      }
+    },
+    "/subscriptions/{id}/cert.pem": {
+      "get": {
+        "tags": ["subscriptions"],
+        "summary": "Combined subscription certificate",
+        "operationId": "get_subscription_cert",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM certificate chain",
+            "content": {
+              "application/x-pem-file": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "404": { "description": "Subscription not found or certificate not available" }
+        }
+      }
+    },
+    "/subscriptions/{id}/key.pem": {
+      "get": {
+        "tags": ["subscriptions"],
+        "summary": "Combined subscription private key",
+        "operationId": "get_subscription_key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM EC private key",
+            "content": {
+              "application/x-pem-file": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "404": { "description": "Subscription not found or key not available" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ServiceIndex": {
+        "type": "object",
+        "required": ["name", "manifest_url", "openapi_url", "docs_url"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "qm-agentd"
+          },
+          "description": {
+            "type": "string",
+            "example": "Quartermaster workload credential sidecar"
+          },
+          "manifest_url": {
+            "type": "string",
+            "example": "/manifest.json"
+          },
+          "openapi_url": {
+            "type": "string",
+            "example": "/openapi.json"
+          },
+          "docs_url": {
+            "type": "string",
+            "example": "/docs"
+          }
+        }
+      },
+      "Manifest": {
+        "type": "object",
+        "required": ["updated_at", "available", "openapi_url", "docs_url"],
+        "properties": {
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC3339 timestamp of this manifest snapshot"
+          },
+          "available": {
+            "type": "array",
+            "description": "Billet names entitled via Quartermaster discovery",
+            "items": { "type": "string" }
+          },
+          "openapi_url": {
+            "type": "string",
+            "description": "Link to the OpenAPI document for this API",
+            "example": "/openapi.json"
+          },
+          "docs_url": {
+            "type": "string",
+            "description": "Link to interactive Swagger UI documentation",
+            "example": "/docs"
+          },
+          "billets": {
+            "type": "object",
+            "description": "Per-billet credentials when auto_per_billet exchange is enabled",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ManifestBillet"
+            }
+          },
+          "subscriptions": {
+            "type": "object",
+            "description": "Active subscriptions keyed by subscription id",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ManifestSubscription"
+            }
+          }
+        }
+      },
+      "ManifestBillet": {
+        "type": "object",
+        "required": ["name", "expires_at", "token_path"],
+        "properties": {
+          "name": { "type": "string" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "token_path": { "type": "string" },
+          "cert_path": { "type": "string" },
+          "key_path": { "type": "string" }
+        }
+      },
+      "ManifestSubscription": {
+        "type": "object",
+        "required": ["billets", "status", "token_path"],
+        "properties": {
+          "billets": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "ready"]
+          },
+          "pending_reason": { "type": "string" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "token_path": { "type": "string" },
+          "cert_path": { "type": "string" },
+          "key_path": { "type": "string" }
+        }
+      },
+      "CreateSubscriptionRequest": {
+        "type": "object",
+        "required": ["billets"],
+        "properties": {
+          "billets": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "example": ["payments", "analytics"]
+          }
+        }
+      },
+      "Subscription": {
+        "allOf": [
+          {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Sorted billet names joined with __",
+                "example": "analytics__payments"
+              }
+            }
+          },
+          { "$ref": "#/components/schemas/ManifestSubscription" }
+        ]
+      }
+    }
+  }
+}
